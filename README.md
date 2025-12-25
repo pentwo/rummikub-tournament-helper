@@ -1,36 +1,243 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Rummikub Tournament Helper - Web App 開發計畫
 
-## Getting Started
+## 專案概述
 
-First, run the development server:
+建立一個 Rummikub 錦標賽管理 Web App，支援多桌同時進行，每桌玩家自行操作計時/計分，電視大螢幕即時顯示戰況排行榜。
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+## 技術架構
+
+### 技術選擇
+- **Framework**: Next.js 15 (App Router)
+- **UI**: Tailwind CSS（簡潔快速）
+- **狀態同步**: Next.js API Routes + Polling
+- **資料儲存**: Vercel KV (Redis)
+- **部署**: Vercel
+
+### 即時同步方案（已選定）
+
+**Next.js API Routes + Vercel KV**
+- 使用 Next.js API Routes 作為後端
+- Vercel KV (Redis) 儲存資料，免費額度充足
+- 電視頁面使用 Polling（每 2 秒）取得最新狀態
+- 部署到 Vercel，手機掃 QR code 即可連線
+
+## 頁面結構
+
+### 1. 電視 Dashboard (`/tv`)
+大螢幕顯示，自動更新
+
+```
+┌─────────────────────────────────────────────────────────┐
+│  🏆 Rummikub Tournament                                 │
+├─────────────────────────────────────────────────────────┤
+│                                                         │
+│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐     │
+│  │   桌 1      │  │   桌 2      │  │   桌 3      │     │
+│  │  第 3 盤    │  │  第 2 盤    │  │  第 1 盤    │     │
+│  │ ──────────  │  │ ──────────  │  │ ──────────  │     │
+│  │ 🟢 小明     │  │    小華     │  │    小強     │     │
+│  │    小美     │  │ 🟢 小李     │  │ 🟢 小王     │     │
+│  │    小王     │  │    小張     │  │    小陳     │     │
+│  └─────────────┘  └─────────────┘  └─────────────┘     │
+│                                                         │
+│  ═══════════════════════════════════════════════════   │
+│                    🏆 排行榜                            │
+│  ─────────────────────────────────────────────────     │
+│  1. 小明 (+125)  2. 小華 (+80)  3. 小美 (+45)  ...     │
+│                                                         │
+└─────────────────────────────────────────────────────────┘
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+### 2. 管理頁面 (`/`)
+主辦方控制台
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+- 新增桌子（輸入 2-4 位玩家名稱）
+- 查看所有桌子狀態
+- 總排行榜
+- 當天歷史紀錄
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+### 3. 桌子頁面 (`/table/[id]`)
+每桌玩家使用手機操作
 
-## Learn More
+```
+遊戲中狀態：
+┌─────────────────────────┐
+│      ⏱️ 0:45            │  <- 倒數計時（背景顏色變化提示）
+├─────────────────────────┤
+│                         │
+│         SM              │  <- 玩家 Initial 頭像
+│        小明             │
+│       目前輪到          │
+│                         │
+│   ┌───┬───┬───┬───┐    │
+│   │+25│-10│+5 │-20│    │  <- 各玩家本盤分數
+│   │小明│小美│小王│小李 │
+│   └───┴───┴───┴───┘    │
+│                         │
+│  [ 點擊任意處切換玩家 ]  │
+│                         │
+│     [結束本盤]          │
+└─────────────────────────┘
 
-To learn more about Next.js, take a look at the following resources:
+結算狀態：
+┌─────────────────────────┐
+│     本盤結算            │
+├─────────────────────────┤
+│  誰贏了？               │
+│  ┌────┐ ┌────┐         │
+│  │小明│ │小美│  ...     │
+│  └────┘ └────┘         │
+├─────────────────────────┤
+│  輸家輸入剩餘牌分數：   │
+│  小美: [  15  ]         │
+│  小王: [  20  ]         │
+│  小李: [  10  ]         │
+│                         │
+│  小明 獲得: +45         │
+│                         │
+│     [確認結算]          │
+└─────────────────────────┘
+```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## 計時器 UI 顏色變化
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+| 剩餘時間 | 背景顏色 |
+|----------|----------|
+| > 30 秒  | 綠色 |
+| 15-30 秒 | 黃色 |
+| < 15 秒  | 紅色 |
+| 0 秒     | 深紅閃爍 |
 
-## Deploy on Vercel
+## 資料模型
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+```typescript
+// 玩家
+interface Player {
+  id: string;
+  name: string;
+  initial: string;  // 名字首字母，如 "小明" -> "明" 或 "SM"
+  totalScore: number;  // 累積總分
+}
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+// 桌子
+interface Table {
+  id: string;
+  players: string[];  // player IDs
+  currentPlayerIndex: number;
+  currentRound: number;
+  status: 'playing' | 'scoring' | 'finished';
+  timerStartedAt: number | null;
+}
+
+// 單盤記錄
+interface Round {
+  id: string;
+  tableId: string;
+  roundNumber: number;
+  winnerId: string;
+  scores: Record<string, number>;  // playerId -> score
+  timestamp: number;
+}
+
+// 當天記錄
+interface TournamentData {
+  date: string;  // YYYY-MM-DD
+  players: Player[];
+  tables: Table[];
+  rounds: Round[];
+}
+```
+
+## 實作步驟
+
+### Phase 1: 專案初始化
+1. 初始化 Next.js 15 專案 + Tailwind CSS
+2. 安裝 @vercel/kv 套件
+3. 建立 TypeScript 類型定義 (`src/types/index.ts`)
+4. 建立 Vercel KV 操作函數 (`src/lib/kv.ts`)
+
+### Phase 2: API Routes
+5. `GET/POST /api/tournament` - 錦標賽資料
+6. `GET/POST /api/tables` - 桌子 CRUD
+7. `GET/PUT /api/tables/[id]` - 單一桌子操作
+8. `POST /api/rounds` - 記錄回合結果
+
+### Phase 3: 共用元件
+9. `PlayerAvatar` - 玩家頭像（Initial）
+10. `Timer` - 60 秒倒數計時器（顏色變化）
+11. `Leaderboard` - 排行榜
+12. `TableCard` - 桌子狀態卡片
+13. `ScoreInput` - 分數輸入元件
+
+### Phase 4: 頁面實作
+14. 管理頁面 (`/`) - 新增桌子、查看狀態、排行榜
+15. 桌子頁面 (`/table/[id]`) - 計時、切換玩家、結算
+16. 電視 Dashboard (`/tv`) - 大螢幕顯示、自動輪詢
+
+### Phase 5: 部署
+17. 設定 Vercel KV 環境變數
+18. 部署到 Vercel
+
+## 檔案結構
+
+```
+rummikub-tourment-helper/
+├── src/
+│   ├── app/
+│   │   ├── page.tsx              # 管理頁面
+│   │   ├── tv/page.tsx           # 電視 Dashboard
+│   │   ├── table/[id]/page.tsx   # 桌子頁面
+│   │   ├── api/
+│   │   │   ├── tournament/route.ts    # GET/POST 錦標賽資料
+│   │   │   ├── tables/route.ts        # GET/POST 桌子
+│   │   │   ├── tables/[id]/route.ts   # GET/PUT 單一桌子
+│   │   │   └── rounds/route.ts        # POST 新增回合記錄
+│   │   ├── layout.tsx
+│   │   └── globals.css
+│   ├── components/
+│   │   ├── TableCard.tsx         # 桌子卡片
+│   │   ├── PlayerAvatar.tsx      # 玩家頭像 (Initial)
+│   │   ├── Timer.tsx             # 倒數計時器
+│   │   ├── Leaderboard.tsx       # 排行榜
+│   │   ├── ScoreInput.tsx        # 分數輸入
+│   │   └── CreateTableModal.tsx  # 新增桌子彈窗
+│   ├── hooks/
+│   │   ├── useTimer.ts           # 計時器 hook
+│   │   ├── useTournament.ts      # 資料 fetch hook
+│   │   └── usePolling.ts         # 輪詢 hook
+│   ├── lib/
+│   │   ├── kv.ts                 # Vercel KV 操作
+│   │   └── utils.ts              # 工具函數
+│   └── types/
+│       └── index.ts              # TypeScript 類型
+├── package.json
+├── tailwind.config.ts
+└── tsconfig.json
+```
+
+## API 設計
+
+### `GET /api/tournament`
+取得當天所有資料（玩家、桌子、回合記錄）
+
+### `POST /api/tables`
+新增桌子
+```json
+{ "playerNames": ["小明", "小美", "小王", "小李"] }
+```
+
+### `PUT /api/tables/[id]`
+更新桌子狀態（切換玩家、開始結算等）
+```json
+{ "currentPlayerIndex": 1, "status": "playing" }
+```
+
+### `POST /api/rounds`
+記錄一盤結果
+```json
+{
+  "tableId": "xxx",
+  "winnerId": "player-1",
+  "scores": { "player-1": 45, "player-2": -15, "player-3": -20, "player-4": -10 }
+}
+```
