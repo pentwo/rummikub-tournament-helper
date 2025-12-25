@@ -4,9 +4,12 @@ import { useState, useEffect, useCallback, use } from 'react';
 import Link from 'next/link';
 import { useTable } from '@/hooks/useTable';
 import { useTournament } from '@/hooks/useTournament';
+import { useToast } from '@/hooks/useToast';
 import { Timer } from '@/components/Timer';
 import { PlayerAvatar } from '@/components/PlayerAvatar';
 import { ScoreInput } from '@/components/ScoreInput';
+import { ReorderPlayersModal } from '@/components/ReorderPlayersModal';
+import { QRCodeModal } from '@/components/QRCodeModal';
 import type { Player } from '@/types';
 
 export default function TablePage({
@@ -17,7 +20,13 @@ export default function TablePage({
   const { id } = use(params);
   const { table, loading, error, updateTable, refetch } = useTable(id);
   const { data: tournamentData, refetch: refetchTournament } = useTournament();
+  const { showToast } = useToast();
   const [winnerId, setWinnerId] = useState<string | null>(null);
+  const [isReorderModalOpen, setIsReorderModalOpen] = useState(false);
+  const [isQRModalOpen, setIsQRModalOpen] = useState(false);
+
+  // Get current page URL for QR code
+  const currentUrl = typeof window !== 'undefined' ? window.location.href : '';
 
   // Get players for this table
   const tablePlayers: Player[] =
@@ -50,6 +59,12 @@ export default function TablePage({
     setWinnerId(null);
   };
 
+  // Reorder players
+  const handleReorderSave = async (newOrder: string[]) => {
+    if (!table) return;
+    await updateTable({ players: newOrder, currentPlayerIndex: 0 });
+  };
+
   // Submit round scores
   const handleScoresSubmit = async (scores: Record<string, number>) => {
     if (!table || !winnerId) return;
@@ -67,12 +82,13 @@ export default function TablePage({
 
       if (!response.ok) throw new Error('Failed to submit scores');
 
+      showToast('Round scores submitted successfully!', 'success');
       setWinnerId(null);
       refetch();
       refetchTournament();
     } catch (err) {
       console.error('Error submitting scores:', err);
-      alert('Failed to submit scores');
+      showToast('Failed to submit scores. Please try again.', 'error');
     }
   };
 
@@ -153,7 +169,23 @@ export default function TablePage({
           &larr; Back
         </Link>
         <span className="text-gray-400">Round {table.currentRound}</span>
-        <div className="w-12"></div>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => setIsQRModalOpen(true)}
+            className="text-gray-400 hover:text-white transition-colors p-1"
+            title="Show QR Code"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h2M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" />
+            </svg>
+          </button>
+          <button
+            onClick={() => setIsReorderModalOpen(true)}
+            className="text-gray-400 hover:text-white transition-colors text-sm"
+          >
+            Reorder
+          </button>
+        </div>
       </div>
 
       {/* Timer */}
@@ -166,53 +198,93 @@ export default function TablePage({
         />
       </div>
 
-      {/* Current Player */}
+      {/* Current Player - Enhanced Tap Zone */}
       <div
-        className="flex-1 flex flex-col items-center justify-center cursor-pointer"
+        className="flex-1 flex flex-col items-center justify-center cursor-pointer group"
         onClick={handleNextPlayer}
       >
-        {currentPlayer && (
-          <PlayerAvatar player={currentPlayer} isActive size="lg" />
-        )}
-        <p className="text-gray-400 mt-4">Current Turn</p>
-        <p className="text-gray-500 text-sm mt-2">Tap anywhere to switch player</p>
+        {/* Player Avatar with animated ring */}
+        <div className="relative">
+          {/* Animated outer ring */}
+          <div className="absolute -inset-4 rounded-full border-2 border-dashed border-white/20 animate-spin-slow" />
+          {/* Pulse ring effect */}
+          <div className="absolute -inset-2 rounded-full border border-green-400/50 animate-pulse-ring" />
+          {currentPlayer && (
+            <PlayerAvatar player={currentPlayer} isActive size="lg" />
+          )}
+        </div>
+
+        <p className="text-gray-300 mt-6 font-medium">Current Turn</p>
+
+        {/* Prominent tap hint button */}
+        <div className="mt-4 px-6 py-3 glass rounded-full group-hover:bg-white/20 transition-all duration-200 active-scale">
+          <span className="text-white/90 flex items-center gap-2 text-sm font-medium">
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 11.5V14m0-2.5v-6a1.5 1.5 0 113 0m-3 6a1.5 1.5 0 00-3 0v2a7.5 7.5 0 0015 0v-5a1.5 1.5 0 00-3 0m-6-3V11m0-5.5v-1a1.5 1.5 0 013 0v1m0 0V11m0-5.5a1.5 1.5 0 013 0v3m0 0V11" />
+            </svg>
+            Tap to switch player
+          </span>
+        </div>
       </div>
 
-      {/* All Players Score Bar */}
-      <div className="bg-gray-800 rounded-lg p-4 mb-4">
-        <div className="flex justify-around">
-          {tablePlayers.map((player, index) => (
-            <div
-              key={player.id}
-              className={`text-center ${
-                index === table.currentPlayerIndex ? 'opacity-100' : 'opacity-60'
-              }`}
-            >
+      {/* All Players Score Bar - Grid Layout */}
+      <div className="glass-dark rounded-xl p-3 mb-4">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+          {tablePlayers.map((player, index) => {
+            const isActive = index === table.currentPlayerIndex;
+            const scoreColor = player.totalScore > 0
+              ? 'text-green-400'
+              : player.totalScore < 0
+                ? 'text-red-400'
+                : 'text-white';
+
+            return (
               <div
-                className={`text-lg font-bold ${
-                  player.totalScore > 0
-                    ? 'text-green-400'
-                    : player.totalScore < 0
-                      ? 'text-red-400'
-                      : 'text-white'
-                }`}
+                key={player.id}
+                className={`
+                  p-3 rounded-lg transition-all duration-300
+                  ${isActive
+                    ? 'bg-green-500/20 ring-2 ring-green-400/70 scale-[1.02]'
+                    : 'bg-gray-700/50'}
+                `}
               >
-                {player.totalScore > 0 ? '+' : ''}
-                {player.totalScore}
+                <div className="flex items-center gap-2 mb-1">
+                  <div className={`w-2 h-2 rounded-full flex-shrink-0 ${isActive ? 'bg-green-400 animate-pulse' : 'bg-gray-500'}`} />
+                  <span className="text-gray-300 text-sm font-medium truncate">{player.name}</span>
+                </div>
+                <div className={`text-2xl font-bold ${scoreColor}`}>
+                  {player.totalScore > 0 ? '+' : ''}{player.totalScore}
+                </div>
               </div>
-              <div className="text-gray-400 text-sm">{player.name}</div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </div>
 
       {/* End Round Button */}
       <button
         onClick={handleEndRound}
-        className="w-full py-4 bg-yellow-500 text-white font-bold rounded-lg hover:bg-yellow-600 transition-colors"
+        className="w-full py-4 bg-gradient-to-r from-yellow-500 to-amber-500 text-white font-bold rounded-xl hover:from-yellow-600 hover:to-amber-600 transition-all duration-200 active-scale shadow-lg shadow-yellow-500/25 touch-target safe-bottom"
       >
         End Round
       </button>
+
+      {/* Reorder Players Modal */}
+      <ReorderPlayersModal
+        isOpen={isReorderModalOpen}
+        players={tablePlayers}
+        playerIds={table.players}
+        onClose={() => setIsReorderModalOpen(false)}
+        onSave={handleReorderSave}
+      />
+
+      {/* QR Code Modal */}
+      <QRCodeModal
+        isOpen={isQRModalOpen}
+        onClose={() => setIsQRModalOpen(false)}
+        url={currentUrl}
+        title="Share This Table"
+      />
     </main>
   );
 }

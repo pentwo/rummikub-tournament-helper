@@ -39,15 +39,28 @@ export function Timer({ duration = 60, startedAt, onTimeUp }: TimerProps) {
   // Use key prop in parent to reset state when startedAt changes
   const colorClass = getTimerColor(remaining);
 
+  // Determine glow effect based on remaining time
+  const getGlowClass = () => {
+    if (remaining <= 0) return 'shadow-glow-red';
+    if (remaining <= 15) return 'shadow-glow-red';
+    if (remaining <= 30) return 'shadow-glow-yellow';
+    return 'shadow-glow-green';
+  };
+
+  // Add bounce animation when time is running low
+  const urgencyClass = remaining > 0 && remaining <= 10 ? 'animate-bounce-subtle' : '';
+
   return (
     <div
       className={`
         ${colorClass}
-        text-white text-6xl font-bold
-        py-8 px-12 rounded-2xl
+        ${getGlowClass()}
+        ${urgencyClass}
+        text-white text-fluid-3xl font-bold
+        py-6 px-10 md:py-8 md:px-12 rounded-2xl
         flex items-center justify-center
-        min-w-[200px]
-        transition-colors duration-300
+        min-w-[180px] md:min-w-[200px]
+        transition-all duration-300
       `}
     >
       {formatTime(remaining)}

@@ -40,6 +40,7 @@ export interface CreateTableRequest {
 }
 
 export interface UpdateTableRequest {
+  players?: string[];
   currentPlayerIndex?: number;
   status?: Table['status'];
   timerStartedAt?: number | null;
