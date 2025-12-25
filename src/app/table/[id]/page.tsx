@@ -125,6 +125,63 @@ export default function TablePage({
     );
   }
 
+  // Finished mode - all 3 rounds completed
+  if (table.status === 'finished') {
+    // Sort players by score
+    const sortedPlayers = [...tablePlayers].sort((a, b) => b.totalScore - a.totalScore);
+
+    return (
+      <main className="min-h-screen bg-gray-900 p-4 flex flex-col items-center justify-center">
+        <div className="w-full max-w-md mx-auto text-center">
+          {/* Trophy icon */}
+          <div className="text-6xl mb-4">🏆</div>
+          <h1 className="text-2xl font-bold text-white mb-2">Table Complete!</h1>
+          <p className="text-gray-400 mb-8">All 3 rounds have been played</p>
+
+          {/* Final Rankings */}
+          <div className="bg-gray-800 rounded-2xl p-6 mb-6">
+            <h2 className="text-lg font-bold text-yellow-400 mb-4">Final Rankings</h2>
+            <div className="space-y-3">
+              {sortedPlayers.map((player, index) => {
+                const medal = index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : '';
+                const scoreColor = player.totalScore > 0
+                  ? 'text-green-400'
+                  : player.totalScore < 0
+                    ? 'text-red-400'
+                    : 'text-white';
+
+                return (
+                  <div
+                    key={player.id}
+                    className={`flex items-center justify-between p-3 rounded-xl ${
+                      index === 0 ? 'bg-yellow-500/20 ring-2 ring-yellow-500/50' : 'bg-gray-700/50'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <span className="text-2xl">{medal || `#${index + 1}`}</span>
+                      <span className="font-medium text-white">{player.name}</span>
+                    </div>
+                    <span className={`text-xl font-bold ${scoreColor}`}>
+                      {player.totalScore > 0 ? '+' : ''}{player.totalScore}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Back button */}
+          <Link
+            href="/"
+            className="block w-full py-4 bg-gradient-to-r from-blue-500 to-indigo-500 text-white font-bold rounded-xl hover:from-blue-600 hover:to-indigo-600 transition-all active-scale"
+          >
+            Back to Tournament
+          </Link>
+        </div>
+      </main>
+    );
+  }
+
   // Scoring mode
   if (table.status === 'scoring') {
     return (
@@ -136,7 +193,7 @@ export default function TablePage({
           >
             &larr; Back
           </Link>
-          <span className="text-gray-400">Round {table.currentRound}</span>
+          <span className="text-gray-400">Round {table.currentRound}/3</span>
           <div className="w-12"></div>
         </div>
         <div className="w-full max-w-md mx-auto">
@@ -168,7 +225,7 @@ export default function TablePage({
         >
           &larr; Back
         </Link>
-        <span className="text-gray-400">Round {table.currentRound}</span>
+        <span className="text-gray-400">Round {table.currentRound}/3</span>
         <div className="flex items-center gap-3">
           <button
             onClick={() => setIsQRModalOpen(true)}

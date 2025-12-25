@@ -104,6 +104,8 @@ export async function updateTable(
   return data;
 }
 
+const MAX_ROUNDS = 3;
+
 export async function addRound(round: Round): Promise<TournamentData> {
   const data = await getTournamentData();
   data.rounds.push(round);
@@ -120,7 +122,14 @@ export async function addRound(round: Round): Promise<TournamentData> {
   const table = data.tables.find((t) => t.id === round.tableId);
   if (table) {
     table.currentRound += 1;
-    table.status = 'playing';
+
+    // Close table after 3 rounds
+    if (table.currentRound >= MAX_ROUNDS) {
+      table.status = 'finished';
+    } else {
+      table.status = 'playing';
+    }
+
     table.currentPlayerIndex = 0;
     table.timerStartedAt = null;
   }
