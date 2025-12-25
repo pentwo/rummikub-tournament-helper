@@ -1,31 +1,34 @@
 import type { TournamentData, Player, Table, Round } from '@/types';
+import Redis from 'ioredis';
 
-// In-memory storage for local development
-// Use globalThis to persist across hot reloads in Next.js dev mode
-const globalStore = globalThis as unknown as {
+// Singleton Redis client
+const globalForRedis = globalThis as unknown as {
+  redis: Redis | undefined;
   memoryStore: Map<string, TournamentData>;
 };
 
-if (!globalStore.memoryStore) {
-  globalStore.memoryStore = new Map<string, TournamentData>();
+if (!globalForRedis.memoryStore) {
+  globalForRedis.memoryStore = new Map<string, TournamentData>();
 }
 
-const memoryStore = globalStore.memoryStore;
+const memoryStore = globalForRedis.memoryStore;
 
-const isKVConfigured = () => {
-  return !!(process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN);
-};
+function getRedisClient(): Redis | null {
+  if (!process.env.REDIS_URL) {
+    return null;
+  }
+
+  if (!globalForRedis.redis) {
+    globalForRedis.redis = new Redis(process.env.REDIS_URL);
+  }
+
+  return globalForRedis.redis;
+}
 
 const getTodayKey = () => {
   const today = new Date().toISOString().split('T')[0];
   return `tournament:${today}`;
 };
-
-// Lazy load @vercel/kv only when configured
-async function getKV() {
-  const { kv } = await import('@vercel/kv');
-  return kv;
-}
 
 export async function getTournamentData(): Promise<TournamentData> {
   const key = getTodayKey();
@@ -38,29 +41,37 @@ export async function getTournamentData(): Promise<TournamentData> {
     rounds: [],
   };
 
-  if (!isKVConfigured()) {
+  const redis = getRedisClient();
+
+  if (!redis) {
     // Use in-memory storage for local development
     console.log('[Dev] Using in-memory storage');
     return memoryStore.get(key) || emptyData;
   }
 
-  const kv = await getKV();
-  const data = await kv.get<TournamentData>(key);
-  return data || emptyData;
+  const raw = await redis.get(key);
+  if (!raw) return emptyData;
+
+  try {
+    return JSON.parse(raw) as TournamentData;
+  } catch {
+    return emptyData;
+  }
 }
 
 export async function saveTournamentData(data: TournamentData): Promise<void> {
   const key = getTodayKey();
 
-  if (!isKVConfigured()) {
+  const redis = getRedisClient();
+
+  if (!redis) {
     // Use in-memory storage for local development
     memoryStore.set(key, data);
     return;
   }
 
-  const kv = await getKV();
   // Set with 24 hour expiry
-  await kv.set(key, data, { ex: 86400 });
+  await redis.setex(key, 86400, JSON.stringify(data));
 }
 
 export async function addPlayer(player: Player): Promise<TournamentData> {
